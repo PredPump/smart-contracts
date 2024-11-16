@@ -4,16 +4,16 @@ pragma solidity ^0.8.0;
 import {Test} from "forge-std/Test.sol";
 import {FixedProductMarketMaker} from "../src/FPMM.sol";
 import {ConditionalTokens} from "../src/ConditionalTokens.sol";
-import {ERC20Mock} from "./ERC20Mock.sol";
+import {ERC20Mock} from "../src/ERC20Mock.sol";
 import {CTHelpers} from "../src/helper/CTHelpers.sol";
 import {console2} from "forge-std/console2.sol";
-import {FPMMFactory} from "../src/CTFFactory.sol";
+import {CTFFactory} from "../src/CTFFactory.sol";
 
 contract FPMMTest is Test {
     FixedProductMarketMaker public fpmm;
     ConditionalTokens public conditionalTokens;
     ERC20Mock public collateralToken;
-    FPMMFactory public fpmmFactory;
+    CTFFactory public ctfFactory;
     bytes32 public conditionId;
     uint256[] public positionIds;
 
@@ -27,7 +27,11 @@ contract FPMMTest is Test {
     uint256 public constant ONE = 10 ** 18;
     uint256 public constant FEE = 2; // 2% fee
 
-    event FPMMFundingAdded(address indexed funder, uint256[] amountsAdded, uint256 sharesMinted);
+    event FPMMFundingAdded(
+        address indexed funder,
+        uint256[] amountsAdded,
+        uint256 sharesMinted
+    );
 
     event FPMMBuy(
         address indexed buyer,
@@ -46,12 +50,17 @@ contract FPMMTest is Test {
     );
 
     function setUp() public {
-         vm.startPrank(ALICE);
+        vm.startPrank(ALICE);
         // Deploy contracts
         collateralToken = new ERC20Mock("Test Token", "TEST");
 
         // Setup condition
-        conditionId = conditionalTokens.prepareCondition(ORACLE, QUESTION_ID, OUTCOME_SLOTS, block.timestamp + 1 days);
+        conditionId = conditionalTokens.prepareCondition(
+            ORACLE,
+            QUESTION_ID,
+            OUTCOME_SLOTS,
+            block.timestamp + 1 days
+        );
 
         // Calculate position IDs for binary outcomes
         positionIds = new uint256[](2);
@@ -61,7 +70,10 @@ contract FPMMTest is Test {
                 conditionId, // Our condition
                 1 << i // Outcome index (1=1, 2=2)
             );
-            positionIds[i] = CTHelpers.getPositionId(ERC20Mock(collateralToken), collectionId);
+            positionIds[i] = CTHelpers.getPositionId(
+                ERC20Mock(collateralToken),
+                collectionId
+            );
         }
 
         // Initialize FPMM
@@ -73,7 +85,14 @@ contract FPMMTest is Test {
 
         // fpmm = new FixedProductMarketMaker(conditionalTokens, collateralToken, conditionIds, outcomeSlotCounts, FEE);
 
-        fpmm = fpmmFactory.createFPMM(collateralToken, ORACLE, QUESTION_ID, OUTCOME_SLOTS, block.timestamp + 1 days, FEE);
+        fpmm = ctfFactory.createFPMM(
+            collateralToken,
+            ORACLE,
+            QUESTION_ID,
+            OUTCOME_SLOTS,
+            block.timestamp + 1 days,
+            FEE
+        );
 
         conditionalTokens = fpmm.conditionalTokens();
 
@@ -133,7 +152,10 @@ contract FPMMTest is Test {
         uint256 investmentAmount = 10 ether;
         uint256 outcomeIndex = 0;
 
-        uint256 expectedTokens = fpmm.calcBuyAmount(investmentAmount, outcomeIndex);
+        uint256 expectedTokens = fpmm.calcBuyAmount(
+            investmentAmount,
+            outcomeIndex
+        );
         uint256 expectedFee = (investmentAmount * FEE) / ONE;
 
         console2.log("expectedTokens", expectedTokens);
@@ -142,7 +164,13 @@ contract FPMMTest is Test {
         collateralToken.approve(address(fpmm), investmentAmount);
 
         vm.expectEmit(true, false, false, true);
-        emit FPMMBuy(BOB, investmentAmount, expectedFee, outcomeIndex, expectedTokens);
+        emit FPMMBuy(
+            BOB,
+            investmentAmount,
+            expectedFee,
+            outcomeIndex,
+            expectedTokens
+        );
 
         fpmm.buy(investmentAmount, outcomeIndex, expectedTokens);
         vm.stopPrank();
@@ -161,7 +189,13 @@ contract FPMMTest is Test {
         conditionalTokens.setApprovalForAll(address(fpmm), true);
 
         vm.expectEmit(true, false, false, true);
-        emit FPMMSell(BOB, returnAmount, expectedFee, outcomeIndex, tokensToSell);
+        emit FPMMSell(
+            BOB,
+            returnAmount,
+            expectedFee,
+            outcomeIndex,
+            tokensToSell
+        );
 
         fpmm.sell(returnAmount, outcomeIndex, tokensToSell);
         vm.stopPrank();
@@ -261,11 +295,10 @@ contract FPMMTest is Test {
     }
 }
 
-
 contract JakeVsMike is Test {
     FixedProductMarketMaker public fpmm;
     ConditionalTokens public conditionalTokens;
-    FPMMFactory public fpmmFactory;
+    CTFFactory public ctfFactory;
     ERC20Mock public collateralToken;
     bytes32 public conditionId;
     uint256[] public positionIds;
@@ -275,13 +308,18 @@ contract JakeVsMike is Test {
     address public constant BOB = address(0x3); // User 1
     address public constant BRIAN = address(0x4); // User 2
 
-    bytes32 public constant QUESTION_ID = bytes32("Who will win ? Jake or Mike");
+    bytes32 public constant QUESTION_ID =
+        bytes32("Who will win ? Jake or Mike");
     uint256 public constant OUTCOME_SLOTS = 2; // Binary outcome
     uint256 public constant HUNDRED = 100;
     uint256 public constant ONE = 10 ** 18;
     uint256 public constant FEE = 2; // 2% fee
 
-    event FPMMFundingAdded(address indexed funder, uint256[] amountsAdded, uint256 sharesMinted);
+    event FPMMFundingAdded(
+        address indexed funder,
+        uint256[] amountsAdded,
+        uint256 sharesMinted
+    );
 
     event FPMMBuy(
         address indexed buyer,
@@ -303,7 +341,7 @@ contract JakeVsMike is Test {
         // Deploy contracts
         vm.startPrank(ALICE);
         collateralToken = new ERC20Mock("Test Token", "TEST");
-        fpmmFactory = new FPMMFactory();
+        ctfFactory = new CTFFactory();
 
         // Calculate position IDs for binary outcomes
         positionIds = new uint256[](2);
@@ -313,7 +351,10 @@ contract JakeVsMike is Test {
                 conditionId, // Our condition
                 1 << i // Outcome index (1=1, 2=2)
             );
-            positionIds[i] = CTHelpers.getPositionId(ERC20Mock(collateralToken), collectionId);
+            positionIds[i] = CTHelpers.getPositionId(
+                ERC20Mock(collateralToken),
+                collectionId
+            );
         }
 
         // Initialize FPMM
@@ -323,11 +364,22 @@ contract JakeVsMike is Test {
         uint256[] memory outcomeSlotCounts = new uint256[](1);
         outcomeSlotCounts[0] = OUTCOME_SLOTS;
 
-        fpmm = fpmmFactory.createFPMM(collateralToken, ALICE, QUESTION_ID, OUTCOME_SLOTS, block.timestamp + 1 days, FEE);
+        fpmm = ctfFactory.createFPMM(
+            collateralToken,
+            ALICE,
+            QUESTION_ID,
+            OUTCOME_SLOTS,
+            block.timestamp + 1 days,
+            FEE
+        );
 
         conditionalTokens = fpmm.conditionalTokens();
 
-        conditionId = conditionalTokens.getConditionId(ALICE, QUESTION_ID, OUTCOME_SLOTS);
+        conditionId = conditionalTokens.getConditionId(
+            ALICE,
+            QUESTION_ID,
+            OUTCOME_SLOTS
+        );
 
         // Mint initial tokens
         collateralToken.mint(ALICE, 10000 ether);
@@ -348,7 +400,7 @@ contract JakeVsMike is Test {
     }
 
     function test_Alice_Fund_Pool() public {
-         vm.startPrank(ALICE);
+        vm.startPrank(ALICE);
 
         uint256 addedFunds = 1000 ether;
         uint256[] memory distributionHint = new uint256[](positionIds.length);
@@ -386,7 +438,10 @@ contract JakeVsMike is Test {
         uint256 investmentAmount = 10 ether;
         uint256 outcomeIndex = 1;
 
-        uint256 expectedTokens = fpmm.calcBuyAmount(investmentAmount, outcomeIndex);
+        uint256 expectedTokens = fpmm.calcBuyAmount(
+            investmentAmount,
+            outcomeIndex
+        );
         uint256 expectedFee = (investmentAmount * FEE) / ONE;
 
         console2.log("expectedTokens", expectedTokens);
@@ -395,7 +450,13 @@ contract JakeVsMike is Test {
         collateralToken.approve(address(fpmm), investmentAmount);
 
         vm.expectEmit(true, false, false, true);
-        emit FPMMBuy(BOB, investmentAmount, expectedFee, outcomeIndex, expectedTokens);
+        emit FPMMBuy(
+            BOB,
+            investmentAmount,
+            expectedFee,
+            outcomeIndex,
+            expectedTokens
+        );
 
         fpmm.buy(investmentAmount, outcomeIndex, expectedTokens);
         vm.stopPrank();
@@ -404,12 +465,18 @@ contract JakeVsMike is Test {
     function test_Brian_Buys_Shares_Mike_Yes() public {
         test_Bob_Buys_Shares_Jake_No();
 
-        console2.log("BRIAN PREVIOUS BALANCE", collateralToken.balanceOf(BRIAN));
+        console2.log(
+            "BRIAN PREVIOUS BALANCE",
+            collateralToken.balanceOf(BRIAN)
+        );
         vm.startPrank(BRIAN);
         uint256 investmentAmount = 10 ether;
         uint256 outcomeIndex = 0;
 
-        uint256 expectedTokens = fpmm.calcBuyAmount(investmentAmount, outcomeIndex);
+        uint256 expectedTokens = fpmm.calcBuyAmount(
+            investmentAmount,
+            outcomeIndex
+        );
         uint256 expectedFee = (investmentAmount * FEE) / ONE;
 
         console2.log("expectedTokens", expectedTokens);
@@ -418,7 +485,13 @@ contract JakeVsMike is Test {
         collateralToken.approve(address(fpmm), investmentAmount);
 
         vm.expectEmit(true, false, false, true);
-        emit FPMMBuy(BRIAN, investmentAmount, expectedFee, outcomeIndex, expectedTokens);
+        emit FPMMBuy(
+            BRIAN,
+            investmentAmount,
+            expectedFee,
+            outcomeIndex,
+            expectedTokens
+        );
 
         fpmm.buy(investmentAmount, outcomeIndex, expectedTokens);
         console2.log("BRIAN AFTER BALANCE", collateralToken.balanceOf(BRIAN));
@@ -430,7 +503,7 @@ contract JakeVsMike is Test {
 
         vm.startPrank(ALICE);
 
-       uint256[] memory payouts = new uint256[](2);
+        uint256[] memory payouts = new uint256[](2);
         payouts[0] = 1;
         payouts[1] = 0;
 
@@ -438,39 +511,51 @@ contract JakeVsMike is Test {
 
         conditionalTokens.reportPayouts(QUESTION_ID, payouts);
 
-
         vm.stopPrank();
 
         vm.startPrank(BRIAN);
 
         uint256[] memory indexSets = new uint256[](2);
-        indexSets[0] = 1;  // Mike's position
-        indexSets[1] = 2;  // Jake's position
+        indexSets[0] = 1; // Mike's position
+        indexSets[1] = 2; // Jake's position
 
-        bytes32 conditionIds = CTHelpers.getConditionId(ALICE, QUESTION_ID, OUTCOME_SLOTS);
+        bytes32 conditionIds = CTHelpers.getConditionId(
+            ALICE,
+            QUESTION_ID,
+            OUTCOME_SLOTS
+        );
 
-        conditionalTokens.redeemPositions(collateralToken, bytes32(0), conditionIds, indexSets);
+        conditionalTokens.redeemPositions(
+            collateralToken,
+            bytes32(0),
+            conditionIds,
+            indexSets
+        );
 
-       uint256 balance = collateralToken.balanceOf(BRIAN);
-       assertGt(balance, 0);
+        uint256 balance = collateralToken.balanceOf(BRIAN);
+        assertGt(balance, 0);
 
-       vm.stopPrank();
+        vm.stopPrank();
 
-       vm.startPrank(BOB);
+        vm.startPrank(BOB);
 
-       // He shouldnt get anything 
+        // He shouldnt get anything
 
+        conditionalTokens.redeemPositions(
+            collateralToken,
+            bytes32(0),
+            conditionIds,
+            indexSets
+        );
 
-        conditionalTokens.redeemPositions(collateralToken, bytes32(0), conditionIds, indexSets);
-
-       uint256 balance2 = collateralToken.balanceOf(BOB);
-       assertGt(balance2, 0);
+        uint256 balance2 = collateralToken.balanceOf(BOB);
+        assertGt(balance2, 0);
     }
 
     function test_Get_Collateral_Value_Of_Single_Share() public {
         test_Brian_Buys_Shares_Mike_Yes();
 
-       (uint256 yesPrice, uint256 noPrice) = fpmm.getOutcomeTokenPrices();
+        (uint256 yesPrice, uint256 noPrice) = fpmm.getOutcomeTokenPrices();
         // console2.log(value);
     }
 }

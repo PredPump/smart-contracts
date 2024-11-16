@@ -2,12 +2,13 @@
 pragma solidity ^0.8.0;
 
 import {SafeMath} from "./helper/SafeMath.sol";
-import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {ConditionalTokens} from "./ConditionalTokens.sol";
 import {CTHelpers} from "./helper/CTHelpers.sol";
-import {IERC1155Receiver} from "openzeppelin-contracts/contracts/token/ERC1155/IERC1155Receiver.sol";
-import {ERC20} from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
-import {console2} from "forge-std/console2.sol";
+import {IERC1155Receiver} from "../lib/openzeppelin-contracts/contracts/token/ERC1155/IERC1155Receiver.sol";
+import {ERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
+
+
 
 library CeilDiv {
     // calculates ceil(x/y)
@@ -430,11 +431,8 @@ contract FixedProductMarketMaker is ERC20, IERC1155Receiver {
         require(collateralToken.transferFrom(msg.sender, address(this), investmentAmount), "cost transfer failed");
 
         uint256 feeAmount = investmentAmount.mul(fee) / ONE;
-        console2.log("feeAmount", feeAmount);
         feePoolWeight = feePoolWeight.add(feeAmount);
-        console2.log("feePoolWeight", feePoolWeight);
         uint256 investmentAmountMinusFees = investmentAmount.sub(feeAmount);
-        console2.log("investmentAmountMinusFees", investmentAmountMinusFees);
         require(
             investmentAmountMinusFees > 0 && investmentAmountMinusFees <= investmentAmount, "Invalid amount after fees"
         );
@@ -442,7 +440,6 @@ contract FixedProductMarketMaker is ERC20, IERC1155Receiver {
             collateralToken.approve(address(conditionalTokens), investmentAmountMinusFees), "approval for splits failed"
         );
         splitPositionThroughAllConditions(investmentAmountMinusFees);
-        console2.log("splitPositionThroughAllConditions done");
 
         conditionalTokens.safeTransferFrom(address(this), msg.sender, positionIds[outcomeIndex], outcomeTokensToBuy, "");
 
@@ -509,7 +506,6 @@ contract FixedProductMarketMaker is ERC20, IERC1155Receiver {
     uint256[] memory poolBalances = getPoolBalances();
     uint256 totalShares = totalSupply();
 
-    console2.log("total supply: ", totalShares);
     
     // If no shares exist, return initial price (1:1)
     if (totalShares == 0) return ONE;
@@ -517,7 +513,6 @@ contract FixedProductMarketMaker is ERC20, IERC1155Receiver {
     // Get total collateral in the pool
     uint256 totalCollateral = collateralToken.balanceOf(address(conditionalTokens));
 
-    console2.log("Total Collateral: ", totalCollateral);
     
     // Each share represents a proportional claim on the pool's collateral
     // Price = total_collateral / total_shares
