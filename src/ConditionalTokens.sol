@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-import {ERC1155} from "openzeppelin-contracts/contracts/token/ERC1155/ERC1155.sol";
+import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {ERC1155} from "../lib/openzeppelin-contracts/contracts/token/ERC1155/ERC1155.sol";
 import {CTHelpers} from "./helper/CTHelpers.sol";
 import {SafeMath} from "./helper/SafeMath.sol";
-import {console2} from "forge-std/console2.sol";
+// import {console2} from "forge-std/console2.sol";
 
 contract ConditionalTokens is ERC1155 {
     using SafeMath for uint256;
@@ -15,7 +16,10 @@ contract ConditionalTokens is ERC1155 {
     /// @param questionId An identifier for the question to be answered by the oracle.
     /// @param outcomeSlotCount The number of outcome slots which should be used for this condition. Must not exceed 256.
     event ConditionPreparation(
-        bytes32 indexed conditionId, address indexed oracle, bytes32 indexed questionId, uint256 outcomeSlotCount
+        bytes32 indexed conditionId,
+        address indexed oracle,
+        bytes32 indexed questionId,
+        uint256 outcomeSlotCount
     );
 
     event ConditionResolution(
@@ -61,9 +65,9 @@ contract ConditionalTokens is ERC1155 {
     mapping(bytes32 => ConditionInfo) public conditionInfo;
 
     struct ConditionInfo {
-        address creator;      // User who created the condition
-        uint256 endTime;     // When the market ends
-        bool isReported;     // If result has been reported
+        address creator; // User who created the condition
+        uint256 endTime; // When the market ends
+        bool isReported; // If result has been reported
     }
 
     constructor() ERC1155("") {}
@@ -77,17 +81,27 @@ contract ConditionalTokens is ERC1155 {
         address oracle,
         bytes32 questionId,
         uint256 outcomeSlotCount,
-        uint256 endTime      // New parameter
+        uint256 endTime // New parameter
     ) external returns (bytes32) {
         require(endTime > block.timestamp, "end time must be in future");
-        
+
         // Original checks
         require(outcomeSlotCount <= 256, "too many outcome slots");
-        require(outcomeSlotCount > 1, "there should be more than one outcome slot");
-        
-        bytes32 conditionId = CTHelpers.getConditionId(oracle, questionId, outcomeSlotCount);
-        require(payoutNumerators[conditionId].length == 0, "condition already prepared");
-        
+        require(
+            outcomeSlotCount > 1,
+            "there should be more than one outcome slot"
+        );
+
+        bytes32 conditionId = CTHelpers.getConditionId(
+            oracle,
+            questionId,
+            outcomeSlotCount
+        );
+        require(
+            payoutNumerators[conditionId].length == 0,
+            "condition already prepared"
+        );
+
         // Store condition info
         conditionInfo[conditionId] = ConditionInfo({
             creator: oracle,
@@ -96,46 +110,75 @@ contract ConditionalTokens is ERC1155 {
         });
 
         payoutNumerators[conditionId] = new uint256[](outcomeSlotCount);
-        emit ConditionPreparation(conditionId, oracle, questionId, outcomeSlotCount);
+        emit ConditionPreparation(
+            conditionId,
+            oracle,
+            questionId,
+            outcomeSlotCount
+        );
         return conditionId;
     }
 
     /// @dev Called by the oracle for reporting results of conditions. Will set the payout vector for the condition with the ID ``keccak256(abi.encodePacked(oracle, questionId, outcomeSlotCount))``, where oracle is the message sender, questionId is one of the parameters of this function, and outcomeSlotCount is the length of the payouts parameter, which contains the payoutNumerators for each outcome slot of the condition.
     /// @param questionId The question ID the oracle is answering for
     /// @param payouts The oracle's answer
-    function reportPayouts(bytes32 questionId, uint256[] calldata payouts) external {
+    function reportPayouts(
+        bytes32 questionId,
+        uint256[] calldata payouts
+    ) external {
         uint256 outcomeSlotCount = payouts.length;
-        require(outcomeSlotCount > 1, "there should be more than one outcome slot");
-        console2.logBytes32(questionId);
-        console2.log(msg.sender);
-        bytes32 conditionId = CTHelpers.getConditionId(msg.sender, questionId, outcomeSlotCount);
+        require(
+            outcomeSlotCount > 1,
+            "there should be more than one outcome slot"
+        );
+        bytes32 conditionId = CTHelpers.getConditionId(
+            msg.sender,
+            questionId,
+            outcomeSlotCount
+        );
         ConditionInfo storage condition = conditionInfo[conditionId];
-        
+
         // New checks
         require(block.timestamp >= condition.endTime, "market not ended yet");
         require(!condition.isReported, "already reported");
         require(
-            msg.sender == condition.creator || block.timestamp >= condition.endTime + 1 days, 
+            msg.sender == condition.creator ||
+                block.timestamp >= condition.endTime + 1 days,
             "only creator can report before grace period"
         );
 
-        require(payoutNumerators[conditionId].length == outcomeSlotCount, "condition not prepared or found");
-        require(payoutDenominator[conditionId] == 0, "payout denominator already set");
+        require(
+            payoutNumerators[conditionId].length == outcomeSlotCount,
+            "condition not prepared or found"
+        );
+        require(
+            payoutDenominator[conditionId] == 0,
+            "payout denominator already set"
+        );
 
         uint256 den = 0;
         for (uint256 i = 0; i < outcomeSlotCount; i++) {
             uint256 num = payouts[i];
             den = den.add(num);
 
-            require(payoutNumerators[conditionId][i] == 0, "payout numerator already set");
+            require(
+                payoutNumerators[conditionId][i] == 0,
+                "payout numerator already set"
+            );
             payoutNumerators[conditionId][i] = num;
         }
-        
+
         require(den > 0, "payout is all zeroes");
         payoutDenominator[conditionId] = den;
         condition.isReported = true;
 
-        emit ConditionResolution(conditionId, msg.sender, questionId, outcomeSlotCount, payoutNumerators[conditionId]);
+        emit ConditionResolution(
+            conditionId,
+            msg.sender,
+            questionId,
+            outcomeSlotCount,
+            payoutNumerators[conditionId]
+        );
     }
 
     /// @dev This function splits a position. If splitting from the collateral, this contract will attempt to transfer `amount` collateral from the message sender to itself. Otherwise, this contract will burn `amount` stake held by the message sender in the position being split worth of EIP 1155 tokens. Regardless, if successful, `amount` stake will be minted in the split target positions. If any of the transfers, mints, or burns fail, the transaction will revert. The transaction will also revert if the given partition is trivial, invalid, or refers to more slots than the condition is prepared with.
@@ -164,11 +207,22 @@ contract ConditionalTokens is ERC1155 {
         uint256[] memory amounts = new uint256[](partition.length);
         for (uint256 i = 0; i < partition.length; i++) {
             uint256 indexSet = partition[i];
-            require(indexSet > 0 && indexSet < fullIndexSet, "got invalid index set");
-            require((indexSet & freeIndexSet) == indexSet, "partition not disjoint");
+            require(
+                indexSet > 0 && indexSet < fullIndexSet,
+                "got invalid index set"
+            );
+            require(
+                (indexSet & freeIndexSet) == indexSet,
+                "partition not disjoint"
+            );
             freeIndexSet ^= indexSet;
             positionIds[i] = CTHelpers.getPositionId(
-                collateralToken, CTHelpers.getCollectionId(parentCollectionId, conditionId, indexSet)
+                collateralToken,
+                CTHelpers.getCollectionId(
+                    parentCollectionId,
+                    conditionId,
+                    indexSet
+                )
             );
             amounts[i] = amount;
         }
@@ -177,11 +231,22 @@ contract ConditionalTokens is ERC1155 {
             // Partitioning the full set of outcomes for the condition in this branch
             if (parentCollectionId == bytes32(0)) {
                 require(
-                    collateralToken.transferFrom(msg.sender, address(this), amount),
+                    collateralToken.transferFrom(
+                        msg.sender,
+                        address(this),
+                        amount
+                    ),
                     "could not receive collateral tokens"
                 );
             } else {
-                _burn(msg.sender, CTHelpers.getPositionId(collateralToken, parentCollectionId), amount);
+                _burn(
+                    msg.sender,
+                    CTHelpers.getPositionId(
+                        collateralToken,
+                        parentCollectionId
+                    ),
+                    amount
+                );
             }
         } else {
             // Partitioning a subset of outcomes for the condition in this branch.
@@ -191,7 +256,11 @@ contract ConditionalTokens is ERC1155 {
                 msg.sender,
                 CTHelpers.getPositionId(
                     collateralToken,
-                    CTHelpers.getCollectionId(parentCollectionId, conditionId, fullIndexSet ^ freeIndexSet)
+                    CTHelpers.getCollectionId(
+                        parentCollectionId,
+                        conditionId,
+                        fullIndexSet ^ freeIndexSet
+                    )
                 ),
                 amount
             );
@@ -204,7 +273,14 @@ contract ConditionalTokens is ERC1155 {
             amounts,
             ""
         );
-        emit PositionSplit(msg.sender, collateralToken, parentCollectionId, conditionId, partition, amount);
+        emit PositionSplit(
+            msg.sender,
+            collateralToken,
+            parentCollectionId,
+            conditionId,
+            partition,
+            amount
+        );
     }
 
     function mergePositions(
@@ -224,11 +300,22 @@ contract ConditionalTokens is ERC1155 {
         uint256[] memory amounts = new uint256[](partition.length);
         for (uint256 i = 0; i < partition.length; i++) {
             uint256 indexSet = partition[i];
-            require(indexSet > 0 && indexSet < fullIndexSet, "got invalid index set");
-            require((indexSet & freeIndexSet) == indexSet, "partition not disjoint");
+            require(
+                indexSet > 0 && indexSet < fullIndexSet,
+                "got invalid index set"
+            );
+            require(
+                (indexSet & freeIndexSet) == indexSet,
+                "partition not disjoint"
+            );
             freeIndexSet ^= indexSet;
             positionIds[i] = CTHelpers.getPositionId(
-                collateralToken, CTHelpers.getCollectionId(parentCollectionId, conditionId, indexSet)
+                collateralToken,
+                CTHelpers.getCollectionId(
+                    parentCollectionId,
+                    conditionId,
+                    indexSet
+                )
             );
             amounts[i] = amount;
         }
@@ -236,23 +323,45 @@ contract ConditionalTokens is ERC1155 {
 
         if (freeIndexSet == 0) {
             if (parentCollectionId == bytes32(0)) {
-                require(collateralToken.transfer(msg.sender, amount), "could not send collateral tokens");
+                require(
+                    collateralToken.transfer(msg.sender, amount),
+                    "could not send collateral tokens"
+                );
             } else {
-                _mint(msg.sender, CTHelpers.getPositionId(collateralToken, parentCollectionId), amount, "");
+                _mint(
+                    msg.sender,
+                    CTHelpers.getPositionId(
+                        collateralToken,
+                        parentCollectionId
+                    ),
+                    amount,
+                    ""
+                );
             }
         } else {
             _mint(
                 msg.sender,
                 CTHelpers.getPositionId(
                     collateralToken,
-                    CTHelpers.getCollectionId(parentCollectionId, conditionId, fullIndexSet ^ freeIndexSet)
+                    CTHelpers.getCollectionId(
+                        parentCollectionId,
+                        conditionId,
+                        fullIndexSet ^ freeIndexSet
+                    )
                 ),
                 amount,
                 ""
             );
         }
 
-        emit PositionsMerge(msg.sender, collateralToken, parentCollectionId, conditionId, partition, amount);
+        emit PositionsMerge(
+            msg.sender,
+            collateralToken,
+            parentCollectionId,
+            conditionId,
+            partition,
+            amount
+        );
     }
 
     function redeemPositions(
@@ -271,21 +380,33 @@ contract ConditionalTokens is ERC1155 {
         uint256 fullIndexSet = (1 << outcomeSlotCount) - 1;
         for (uint256 i = 0; i < indexSets.length; i++) {
             uint256 indexSet = indexSets[i];
-            require(indexSet > 0 && indexSet < fullIndexSet, "got invalid index set");
+            require(
+                indexSet > 0 && indexSet < fullIndexSet,
+                "got invalid index set"
+            );
             uint256 positionId = CTHelpers.getPositionId(
-                collateralToken, CTHelpers.getCollectionId(parentCollectionId, conditionId, indexSet)
+                collateralToken,
+                CTHelpers.getCollectionId(
+                    parentCollectionId,
+                    conditionId,
+                    indexSet
+                )
             );
 
             uint256 payoutNumerator = 0;
             for (uint256 j = 0; j < outcomeSlotCount; j++) {
                 if (indexSet & (1 << j) != 0) {
-                    payoutNumerator = payoutNumerator.add(payoutNumerators[conditionId][j]);
+                    payoutNumerator = payoutNumerator.add(
+                        payoutNumerators[conditionId][j]
+                    );
                 }
             }
 
             uint256 payoutStake = balanceOf(msg.sender, positionId);
             if (payoutStake > 0) {
-                totalPayout = totalPayout.add(payoutStake.mul(payoutNumerator).div(den));
+                totalPayout = totalPayout.add(
+                    payoutStake.mul(payoutNumerator).div(den)
+                );
                 _burn(msg.sender, positionId, payoutStake);
             }
         }
@@ -293,19 +414,37 @@ contract ConditionalTokens is ERC1155 {
         if (totalPayout > 0) {
             if (parentCollectionId == bytes32(0)) {
                 require(
-                    collateralToken.transfer(msg.sender, totalPayout), "could not transfer payout to message sender"
+                    collateralToken.transfer(msg.sender, totalPayout),
+                    "could not transfer payout to message sender"
                 );
             } else {
-                _mint(msg.sender, CTHelpers.getPositionId(collateralToken, parentCollectionId), totalPayout, "");
+                _mint(
+                    msg.sender,
+                    CTHelpers.getPositionId(
+                        collateralToken,
+                        parentCollectionId
+                    ),
+                    totalPayout,
+                    ""
+                );
             }
         }
-        emit PayoutRedemption(msg.sender, collateralToken, parentCollectionId, conditionId, indexSets, totalPayout);
+        emit PayoutRedemption(
+            msg.sender,
+            collateralToken,
+            parentCollectionId,
+            conditionId,
+            indexSets,
+            totalPayout
+        );
     }
 
     /// @dev Gets the outcome slot count of a condition.
     /// @param conditionId ID of the condition.
     /// @return Number of outcome slots associated with a condition, or zero if condition has not been prepared yet.
-    function getOutcomeSlotCount(bytes32 conditionId) external view returns (uint256) {
+    function getOutcomeSlotCount(
+        bytes32 conditionId
+    ) external view returns (uint256) {
         return payoutNumerators[conditionId].length;
     }
 
@@ -313,11 +452,11 @@ contract ConditionalTokens is ERC1155 {
     /// @param oracle The account assigned to report the result for the prepared condition.
     /// @param questionId An identifier for the question to be answered by the oracle.
     /// @param outcomeSlotCount The number of outcome slots which should be used for this condition. Must not exceed 256.
-    function getConditionId(address oracle, bytes32 questionId, uint256 outcomeSlotCount)
-        external
-        pure
-        returns (bytes32)
-    {
+    function getConditionId(
+        address oracle,
+        bytes32 questionId,
+        uint256 outcomeSlotCount
+    ) external pure returns (bytes32) {
         return CTHelpers.getConditionId(oracle, questionId, outcomeSlotCount);
     }
 
@@ -325,36 +464,49 @@ contract ConditionalTokens is ERC1155 {
     /// @param parentCollectionId Collection ID of the parent outcome collection, or bytes32(0) if there's no parent.
     /// @param conditionId Condition ID of the outcome collection to combine with the parent outcome collection.
     /// @param indexSet Index set of the outcome collection to combine with the parent outcome collection.
-    function getCollectionId(bytes32 parentCollectionId, bytes32 conditionId, uint256 indexSet)
-        external
-        view
-        returns (bytes32)
-    {
-        return CTHelpers.getCollectionId(parentCollectionId, conditionId, indexSet);
+    function getCollectionId(
+        bytes32 parentCollectionId,
+        bytes32 conditionId,
+        uint256 indexSet
+    ) external view returns (bytes32) {
+        return
+            CTHelpers.getCollectionId(
+                parentCollectionId,
+                conditionId,
+                indexSet
+            );
     }
 
     /// @dev Constructs a position ID from a collateral token and an outcome collection. These IDs are used as the ERC-1155 ID for this contract.
     /// @param collateralToken Collateral token which backs the position.
     /// @param collectionId ID of the outcome collection associated with this position.
-    function getPositionId(IERC20 collateralToken, bytes32 collectionId) external pure returns (uint256) {
+    function getPositionId(
+        IERC20 collateralToken,
+        bytes32 collectionId
+    ) external pure returns (uint256) {
         return CTHelpers.getPositionId(collateralToken, collectionId);
     }
 
-    function canReport(bytes32 conditionId) external view returns (bool, string memory) {
+    function canReport(
+        bytes32 conditionId
+    ) external view returns (bool, string memory) {
         ConditionInfo storage condition = conditionInfo[conditionId];
-        
+
         if (condition.isReported) {
             return (false, "already reported");
         }
-        
+
         if (block.timestamp < condition.endTime) {
             return (false, "market not ended yet");
         }
-        
-        if (msg.sender != condition.creator && block.timestamp < condition.endTime + 1 days) {
+
+        if (
+            msg.sender != condition.creator &&
+            block.timestamp < condition.endTime + 1 days
+        ) {
             return (false, "only creator can report before grace period");
         }
-        
+
         return (true, "can report");
     }
 }
